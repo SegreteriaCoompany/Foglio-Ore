@@ -596,8 +596,8 @@ function bRiep(){
         });
       } else {
         const c1=getCanNomeSingle(1,g);const c2=getCanNomeSingle(2,g);
-        if(c1&&e1&&u1)cantieriMap[c1]=(cantieriMap[c1]||0)+(tm(u1)-tm(e1))/60;
-        if(c2&&e2&&u2)cantieriMap[c2]=(cantieriMap[c2]||0)+(tm(u2)-tm(e2))/60;
+if(c1&&e1&&u1){let d1=tm(u1)-tm(e1);if(d1<0)d1+=1440;cantieriMap[c1]=(cantieriMap[c1]||0)+d1/60;}
+if(c2&&e2&&u2){let d2=tm(u2)-tm(e2);if(d2<0)d2+=1440;cantieriMap[c2]=(cantieriMap[c2]||0)+d2/60;}
       }
     }
   }
