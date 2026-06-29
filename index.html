@@ -74,17 +74,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .mt tr.pr td{background:rgba(186,117,23,.08);}
 .mt td.sep{width:5px;background:rgba(0,0,0,.06);padding:0;}
 
-/* MULTI CANTIERE dentro cella */
-.mc-wrap{display:flex;flex-direction:column;gap:3px;}
-.mc-row{display:flex;align-items:center;gap:3px;}
-.mc-row select{flex:1;padding:3px 2px;border:1.5px solid var(--border);border-radius:5px;font-size:10px;background:#fff;}
+/* MULTI CANTIERE — layout a card, nessuna tabella orizzontale */
+.day-card{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+.day-card-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--gray-l);border-bottom:1px solid var(--border);}
+.day-card-hdr .day-num{font-size:15px;font-weight:700;min-width:30px;}
+.day-card-hdr .day-name{font-size:12px;color:var(--muted);margin-left:4px;}
+.day-card-hdr .day-tot{font-size:14px;font-weight:700;color:var(--blue);}
+.day-card-hdr .day-tg select{padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:11px;background:#fff;}
+.day-card.we .day-card-hdr{background:#f0eeee;}
+.day-card.we .day-card-hdr .day-name{color:#b94040;}
+.day-card.fr .day-card-hdr{background:var(--green-l);}
+.day-card.mr .day-card-hdr{background:var(--red-l);}
+.day-card.pr .day-card-hdr{background:var(--amber-l);}
+.day-card-body{padding:8px 10px;}
+.turno-section{margin-bottom:8px;}
+.turno-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;padding:2px 7px;border-radius:4px;display:inline-block;}
+.turno-label.mat{background:#1a6a9a;color:#fff;}
+.turno-label.pom{background:#7a3a1a;color:#fff;}
+.mc-wrap{display:flex;flex-direction:column;gap:4px;}
+.mc-row{display:grid;grid-template-columns:1fr 72px 72px 36px auto;align-items:center;gap:4px;}
+.mc-row select{padding:5px 4px;border:1.5px solid var(--border);border-radius:6px;font-size:11px;background:#fff;width:100%;}
 .mc-row select:focus{outline:none;border-color:var(--blue);}
-.mc-row .mc-time{width:68px;padding:3px 3px;border:1.5px solid var(--border);border-radius:5px;font-size:10px;text-align:center;background:#fff;touch-action:manipulation;}
+.mc-row .mc-time{padding:5px 4px;border:1.5px solid var(--border);border-radius:6px;font-size:11px;text-align:center;background:#fff;touch-action:manipulation;width:100%;}
 .mc-row .mc-time:focus{outline:none;border-color:var(--blue);}
-.mc-row .mc-ht{font-size:10px;color:var(--blue);font-weight:600;min-width:28px;text-align:center;}
-.mc-row .mc-rm{background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;line-height:1;padding:1px;}
-.mc-add{background:none;border:1px dashed var(--blue);color:var(--blue);font-size:10px;border-radius:5px;padding:2px 6px;cursor:pointer;margin-top:2px;width:100%;}
+.mc-row .mc-ht{font-size:11px;color:var(--blue);font-weight:700;text-align:center;}
+.mc-row .mc-rm{background:none;border:none;color:var(--red);font-size:15px;cursor:pointer;line-height:1;padding:2px;}
+.mc-row-hdr{display:grid;grid-template-columns:1fr 72px 72px 36px auto;gap:4px;margin-bottom:2px;}
+.mc-row-hdr span{font-size:9px;font-weight:600;color:var(--muted);text-transform:uppercase;text-align:center;}
+.mc-row-hdr span:first-child{text-align:left;}
+.mc-add{background:none;border:1.5px dashed var(--blue);color:var(--blue);font-size:10px;border-radius:6px;padding:4px 8px;cursor:pointer;margin-top:3px;width:100%;}
 .mc-add:active{background:var(--blue-l);}
+/* Tabella semplice (solo per non-multi) rimane */
 
 /* RIEPILOGO */
 .rgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px;}
@@ -272,15 +292,34 @@ function deleteBozza(n,m,a){localStorage.removeItem(`bozza_${n}_${m}_${a}`);}
 let appData={dipendenti:[]};
 let _dataSaving=false;
 
+const CACHE_TTL=60*60*1000;
 async function loadData(){
   document.getElementById('loadingOverlay').style.display='flex';
+  try{
+    const cached=JSON.parse(localStorage.getItem('coompany_data'));
+    if(cached&&cached.dipendenti&&cached._ts&&(Date.now()-cached._ts)<CACHE_TTL){
+      appData.dipendenti=cached.dipendenti;
+      appData.dipendenti.forEach(d=>{if(d.multiCantiere===undefined)d.multiCantiere=false;});
+      renderNomiSelect();
+      document.getElementById('loadingOverlay').style.display='none';
+      fetch(APPS_SCRIPT_URL+'?action=getDati',{method:'GET'}).then(r=>r.json()).then(j=>{
+        if(j.status==='ok'&&j.dipendenti){
+          appData.dipendenti=j.dipendenti;
+          appData.dipendenti.forEach(d=>{if(d.multiCantiere===undefined)d.multiCantiere=false;});
+          localStorage.setItem('coompany_data',JSON.stringify({dipendenti:appData.dipendenti,_ts:Date.now()}));
+          renderNomiSelect();
+        }
+      }).catch(()=>{});
+      return;
+    }
+  }catch(_){}
   try{
     const r=await fetch(APPS_SCRIPT_URL+'?action=getDati',{method:'GET'});
     const j=await r.json();
     if(j.status==='ok'&&j.dipendenti){appData.dipendenti=j.dipendenti;}
   }catch(e){
     console.warn('Sheets non raggiungibile, uso cache locale',e);
-    try{const loc=JSON.parse(localStorage.getItem('coompany_data'));if(loc&&loc.dipendenti)appData=loc;}catch(_){}
+    try{const loc=JSON.parse(localStorage.getItem('coompany_data'));if(loc&&loc.dipendenti)appData.dipendenti=loc.dipendenti;}catch(_){}
   }
   appData.dipendenti.forEach(d=>{if(d.multiCantiere===undefined)d.multiCantiere=false;});
   renderNomiSelect();
@@ -288,7 +327,7 @@ async function loadData(){
 }
 
 async function saveData(d){
-  try{localStorage.setItem('coompany_data',JSON.stringify(d));}catch(_){}
+  try{localStorage.setItem('coompany_data',JSON.stringify({dipendenti:d.dipendenti,_ts:Date.now()}));}catch(_){}
   if(_dataSaving)return;
   _dataSaving=true;
   try{
@@ -355,7 +394,7 @@ function renderMcCell(nome,g,turno,bozzaArr){
 }
 
 function mcRowHtml(nome,g,turno,ci,canVal,entVal,usciVal){
-  const rmBtn=ci>0?`<button class="mc-rm" onclick="removeMcRow(${g},${turno},${ci})">✕</button>`:'';
+  const rmBtn=ci>0?`<button class="mc-rm" onclick="removeMcRow(${g},${turno},${ci})" title="Rimuovi">✕</button>`:'<span></span>';
   return `<div class="mc-row" id="mcrow_${turno}_${g}_${ci}">
     <select onchange="scheduleAutosave()" id="mccan_${turno}_${g}_${ci}">${cantieriOpts(nome,canVal)}</select>
     <input type="time" class="mc-time" id="mcent_${turno}_${g}_${ci}" value="${entVal||''}" oninput="cMc(${g},${turno},${ci});scheduleAutosave()">
@@ -466,67 +505,90 @@ function buildOre(){
   const multi=isMulti(nome);
   w.dataset.built='1';w.dataset.mese=mese;w.dataset.anno=anno;
 
-  const cantiereHeader=multi
-    ? `<th style="min-width:200px">Cantieri (Entrata–Uscita)</th>`
-    : `<th style="min-width:95px">Cantiere</th>`;
-
-  let h=`<div class="card">
+  if(multi){
+    // ── LAYOUT A CARD PER GIORNO ──
+    let h=`<div class="card">
   <div class="ct">📅 ${mese} ${anno} — ${nome}</div>
-  <div class="al al-i" style="font-size:11px">Compila entrata/uscita e cantiere per ogni turno.${multi?' Puoi aggiungere più cantieri per turno con le relative ore.':''} Dati salvati automaticamente.</div>
+  <div class="al al-i" style="font-size:11px">Aggiungi cantieri per turno con le relative ore. Dati salvati automaticamente.</div>
+</div>`;
+    for(let g=1;g<=nGg;g++){
+      const dow=mIdx>=0?new Date(anno,mIdx,g).getDay():1;
+      const dn=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][dow];
+      const we=dow===0||dow===6;
+      const bg=bozza?bozza[g]:{};
+      const tgVal=bg?.tg||'L';
+      const tgClass=tgVal==='F'?'fr':tgVal==='M'?'mr':tgVal==='P'?'pr':(we?'we':'');
+      const mc1=bg?.mc1||[{can:'',ent:'',usc:''}];
+      const mc2=bg?.mc2||[{can:'',ent:'',usc:''}];
+      h+=`<div class="day-card ${tgClass}" id="rg${g}">
+  <div class="day-card-hdr">
+    <span class="day-num">${g}</span><span class="day-name">${dn}</span>
+    <span class="day-tot" id="ht${g}">—</span>
+    <div class="day-tg"><select class="tg" id="tg${g}" onchange="stGg(${g});scheduleAutosave()">
+      <option value="L"${tgVal==='L'?' selected':''}>Lavoro</option>
+      <option value="F"${tgVal==='F'?' selected':''}>Ferie</option>
+      <option value="M"${tgVal==='M'?' selected':''}>Malattia</option>
+      <option value="P"${tgVal==='P'?' selected':''}>Permesso</option>
+      <option value="R"${tgVal==='R'?' selected':''}>Riposo</option>
+    </select></div>
+  </div>
+  <div class="day-card-body">
+    <div class="turno-section">
+      <span class="turno-label mat">🌅 Mattina</span>
+      <div class="mc-row-hdr"><span>Cantiere</span><span>Entrata</span><span>Uscita</span><span>Ore</span><span></span></div>
+      ${renderMcCell(nome,g,1,mc1)}
+    </div>
+    <div class="turno-section">
+      <span class="turno-label pom">🌆 Pomeriggio</span>
+      <div class="mc-row-hdr"><span>Cantiere</span><span>Entrata</span><span>Uscita</span><span>Ore</span><span></span></div>
+      ${renderMcCell(nome,g,2,mc2)}
+    </div>
+  </div>
+</div>`;
+    }
+    w.innerHTML=h;
+  } else {
+    // ── LAYOUT A TABELLA (no multi) ──
+    let h=`<div class="card">
+  <div class="ct">📅 ${mese} ${anno} — ${nome}</div>
+  <div class="al al-i" style="font-size:11px">Compila entrata/uscita e cantiere per ogni turno. Dati salvati automaticamente.</div>
   <div style="overflow-x:auto"><table class="mt">
     <thead>
       <tr>
         <th rowspan="2" style="width:32px">G</th>
-        <th colspan="${multi?3:3}" class="turno-h mat">🌅 Mattina</th>
+        <th colspan="3" class="turno-h mat">🌅 Mattina</th>
         <th class="sep" rowspan="2"></th>
-        <th colspan="${multi?3:3}" class="turno-h pom">🌆 Pomeriggio</th>
+        <th colspan="3" class="turno-h pom">🌆 Pomeriggio</th>
         <th rowspan="2" style="width:38px">Ore</th>
         <th rowspan="2" style="width:68px">Tipo</th>
       </tr>
       <tr>
-        <th style="width:76px">Entrata</th><th style="width:76px">Uscita</th>${cantiereHeader}
-        <th style="width:76px">Entrata</th><th style="width:76px">Uscita</th>${cantiereHeader}
+        <th style="width:76px">Entrata</th><th style="width:76px">Uscita</th><th style="min-width:95px">Cantiere</th>
+        <th style="width:76px">Entrata</th><th style="width:76px">Uscita</th><th style="min-width:95px">Cantiere</th>
       </tr>
     </thead><tbody>`;
-
-  for(let g=1;g<=nGg;g++){
-    const dow=mIdx>=0?new Date(anno,mIdx,g).getDay():1;
-    const dn=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][dow];
-    const we=dow===0||dow===6;
-    const bg=bozza?bozza[g]:{};
-    const tgVal=bg?.tg||'L';
-    const tgClass=tgVal==='F'?'fr':tgVal==='M'?'mr':tgVal==='P'?'pr':(we?'we':'');
-
-    let canCell1,canCell2;
-    if(multi){
-      const mc1=bg?.mc1||[{can:'',ore:''}];
-      const mc2=bg?.mc2||[{can:'',ore:''}];
-      canCell1=renderMcCell(nome,g,1,mc1);
-      canCell2=renderMcCell(nome,g,2,mc2);
-    } else {
+    for(let g=1;g<=nGg;g++){
+      const dow=mIdx>=0?new Date(anno,mIdx,g).getDay():1;
+      const dn=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][dow];
+      const we=dow===0||dow===6;
+      const bg=bozza?bozza[g]:{};
+      const tgVal=bg?.tg||'L';
+      const tgClass=tgVal==='F'?'fr':tgVal==='M'?'mr':tgVal==='P'?'pr':(we?'we':'');
       const can1Val=bg?.can1||'';const canAltro1Val=bg?.canAltro1||'';
       const can2Val=bg?.can2||'';const canAltro2Val=bg?.canAltro2||'';
-      canCell1=`<select class="can" id="can1_${g}" onchange="stCan(1,${g});scheduleAutosave()">${cantieriOpts(nome,can1Val)}</select>
+      const canCell1=`<select class="can" id="can1_${g}" onchange="stCan(1,${g});scheduleAutosave()">${cantieriOpts(nome,can1Val)}</select>
         <input class="altro" type="text" id="canAltro1_${g}" placeholder="Scrivi..." style="display:${can1Val==='ALTRO'?'block':'none'}" value="${canAltro1Val}" oninput="scheduleAutosave()">`;
-      canCell2=`<select class="can" id="can2_${g}" onchange="stCan(2,${g});scheduleAutosave()">${cantieriOpts(nome,can2Val)}</select>
+      const canCell2=`<select class="can" id="can2_${g}" onchange="stCan(2,${g});scheduleAutosave()">${cantieriOpts(nome,can2Val)}</select>
         <input class="altro" type="text" id="canAltro2_${g}" placeholder="Scrivi..." style="display:${can2Val==='ALTRO'?'block':'none'}" value="${canAltro2Val}" oninput="scheduleAutosave()">`;
-    }
-
-    const timeCells1=multi
-      ?`<td colspan="2" style="padding:2px">${canCell1}</td>`
-      :`<td><input type="time" id="e1_${g}" value="${bg?.e1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-       <td><input type="time" id="u1_${g}" value="${bg?.u1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-       <td>${canCell1}</td>`;
-    const timeCells2=multi
-      ?`<td colspan="2" style="padding:2px">${canCell2}</td>`
-      :`<td><input type="time" id="e2_${g}" value="${bg?.e2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-       <td><input type="time" id="u2_${g}" value="${bg?.u2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-       <td>${canCell2}</td>`;
-    h+=`<tr id="rg${g}" class="${tgClass}">
+      h+=`<tr id="rg${g}" class="${tgClass}">
       <td class="dg"><b>${g}</b><br>${dn}</td>
-      ${timeCells1}
+      <td><input type="time" id="e1_${g}" value="${bg?.e1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+      <td><input type="time" id="u1_${g}" value="${bg?.u1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+      <td>${canCell1}</td>
       <td class="sep"></td>
-      ${timeCells2}
+      <td><input type="time" id="e2_${g}" value="${bg?.e2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+      <td><input type="time" id="u2_${g}" value="${bg?.u2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+      <td>${canCell2}</td>
       <td class="ht" id="ht${g}">—</td>
       <td><select class="tg" id="tg${g}" onchange="stGg(${g});scheduleAutosave()">
         <option value="L"${tgVal==='L'?' selected':''}>Lavoro</option>
@@ -536,9 +598,10 @@ function buildOre(){
         <option value="R"${tgVal==='R'?' selected':''}>Riposo</option>
       </select></td>
     </tr>`;
+    }
+    h+=`</tbody></table></div></div>`;
+    w.innerHTML=h;
   }
-  h+=`</tbody></table></div></div>`;
-  w.innerHTML=h;
   if(bozza){for(let g=1;g<=nGg;g++)cGg(g);}
 }
 
@@ -572,9 +635,7 @@ function stGg(g){
   const t=document.getElementById(`tg${g}`).value;
   const r=document.getElementById(`rg${g}`);
   const we=r.classList.contains('we');
-  // rimuovi solo le classi di tipo giorno, non toccare 'we'
   r.classList.remove('fr','mr','pr');
-  if(!we) r.classList.remove('we'); // lascia 'we' se c'era
   if(t==='F') r.classList.add('fr');
   else if(t==='M') r.classList.add('mr');
   else if(t==='P') r.classList.add('pr');
