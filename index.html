@@ -79,8 +79,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .mc-row{display:flex;align-items:center;gap:3px;}
 .mc-row select{flex:1;padding:3px 2px;border:1.5px solid var(--border);border-radius:5px;font-size:10px;background:#fff;}
 .mc-row select:focus{outline:none;border-color:var(--blue);}
-.mc-row .mc-ore{width:44px;padding:3px 3px;border:1.5px solid var(--border);border-radius:5px;font-size:10px;text-align:center;background:#fff;}
-.mc-row .mc-ore:focus{outline:none;border-color:var(--blue);}
+.mc-row .mc-time{width:68px;padding:3px 3px;border:1.5px solid var(--border);border-radius:5px;font-size:10px;text-align:center;background:#fff;touch-action:manipulation;}
+.mc-row .mc-time:focus{outline:none;border-color:var(--blue);}
+.mc-row .mc-ht{font-size:10px;color:var(--blue);font-weight:600;min-width:28px;text-align:center;}
 .mc-row .mc-rm{background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;line-height:1;padding:1px;}
 .mc-add{background:none;border:1px dashed var(--blue);color:var(--blue);font-size:10px;border-radius:5px;padding:2px 6px;cursor:pointer;margin-top:2px;width:100%;}
 .mc-add:active{background:var(--blue-l);}
@@ -346,20 +347,32 @@ function cantieriOpts(nome,selVal){
 }
 
 // ── MULTI CANTIERE CELL ──
-// Struttura bozza per multi: [{can:'Risto',ore:'3'},{can:'Volta',ore:'2'}]
+// Struttura bozza per multi: [{can:'Risto',ent:'08:00',usc:'12:00',ore:4},{...}]
 function renderMcCell(nome,g,turno,bozzaArr){
-  const arr=bozzaArr&&bozzaArr.length>0?bozzaArr:[{can:'',ore:''}];
-  let rows=arr.map((item,ci)=>mcRowHtml(nome,g,turno,ci,item.can,item.ore)).join('');
+  const arr=bozzaArr&&bozzaArr.length>0?bozzaArr:[{can:'',ent:'',usc:''}];
+  let rows=arr.map((item,ci)=>mcRowHtml(nome,g,turno,ci,item.can,item.ent,item.usc)).join('');
   return `<div class="mc-wrap" id="mcwrap_${turno}_${g}">${rows}<button class="mc-add" onclick="addMcRow('${nome}',${g},${turno})">+ cantiere</button></div>`;
 }
 
-function mcRowHtml(nome,g,turno,ci,canVal,oreVal){
+function mcRowHtml(nome,g,turno,ci,canVal,entVal,usciVal){
   const rmBtn=ci>0?`<button class="mc-rm" onclick="removeMcRow(${g},${turno},${ci})">✕</button>`:'';
   return `<div class="mc-row" id="mcrow_${turno}_${g}_${ci}">
     <select onchange="scheduleAutosave()" id="mccan_${turno}_${g}_${ci}">${cantieriOpts(nome,canVal)}</select>
-    <input type="number" class="mc-ore" placeholder="h" min="0" max="24" step="0.5" value="${oreVal}" oninput="scheduleAutosave()" id="mcore_${turno}_${g}_${ci}">
+    <input type="time" class="mc-time" id="mcent_${turno}_${g}_${ci}" value="${entVal||''}" oninput="cMc(${g},${turno},${ci});scheduleAutosave()">
+    <input type="time" class="mc-time" id="mcusc_${turno}_${g}_${ci}" value="${usciVal||''}" oninput="cMc(${g},${turno},${ci});scheduleAutosave()">
+    <span class="mc-ht" id="mcht_${turno}_${g}_${ci}">—</span>
     ${rmBtn}
   </div>`;
+}
+
+function cMc(g,turno,ci){
+  const tm=v=>{if(!v)return 0;const[h,m]=v.split(':').map(Number);return h*60+m;};
+  const e=document.getElementById(`mcent_${turno}_${g}_${ci}`)?.value;
+  const u=document.getElementById(`mcusc_${turno}_${g}_${ci}`)?.value;
+  const el=document.getElementById(`mcht_${turno}_${g}_${ci}`);
+  if(e&&u){let d=tm(u)-tm(e);if(d<0)d+=1440;el.textContent=d>0?(Math.floor(d/60)+'h'+(d%60?String(d%60).padStart(2,'0'):'')):'—';}
+  else if(el) el.textContent='—';
+  cGg(g);
 }
 
 function addMcRow(nome,g,turno){
@@ -367,7 +380,7 @@ function addMcRow(nome,g,turno){
   const rows=wrap.querySelectorAll('.mc-row');
   const ci=rows.length;
   const div=document.createElement('div');
-  div.innerHTML=mcRowHtml(nome,g,turno,ci,'','');
+  div.innerHTML=mcRowHtml(nome,g,turno,ci,'','','');
   // insert before the + button
   wrap.insertBefore(div.firstElementChild,wrap.lastElementChild);
   scheduleAutosave();
@@ -383,15 +396,20 @@ function removeMcRow(g,turno,ci){
 }
 
 function getMcData(g,turno){
+  const tm=v=>{if(!v)return 0;const[h,m]=v.split(':').map(Number);return h*60+m;};
   const wrap=document.getElementById(`mcwrap_${turno}_${g}`);
   if(!wrap)return[];
   const result=[];
   wrap.querySelectorAll('.mc-row').forEach((row,i)=>{
     const canEl=document.getElementById(`mccan_${turno}_${g}_${i}`);
-    const oreEl=document.getElementById(`mcore_${turno}_${g}_${i}`);
+    const entEl=document.getElementById(`mcent_${turno}_${g}_${i}`);
+    const uscEl=document.getElementById(`mcusc_${turno}_${g}_${i}`);
     if(canEl){
-      let canVal=canEl.value;
-      result.push({can:canVal,ore:oreEl?oreEl.value:''});
+      const e=entEl?entEl.value:'';
+      const u=uscEl?uscEl.value:'';
+      let ore=0;
+      if(e&&u){let d=tm(u)-tm(e);if(d<0)d+=1440;ore=Math.round(d/60*10)/10;}
+      result.push({can:canEl.value,ent:e,usc:u,ore});
     }
   });
   return result;
@@ -412,16 +430,16 @@ function scheduleAutosave(){
     const ore={};
     for(let g=1;g<=nGg;g++){
       const base={
-        e1:document.getElementById(`e1_${g}`)?.value||'',
-        u1:document.getElementById(`u1_${g}`)?.value||'',
-        e2:document.getElementById(`e2_${g}`)?.value||'',
-        u2:document.getElementById(`u2_${g}`)?.value||'',
         tg:document.getElementById(`tg${g}`)?.value||'L',
       };
       if(multi){
         base.mc1=getMcData(g,1);
         base.mc2=getMcData(g,2);
       } else {
+        base.e1=document.getElementById(`e1_${g}`)?.value||'';
+        base.u1=document.getElementById(`u1_${g}`)?.value||'';
+        base.e2=document.getElementById(`e2_${g}`)?.value||'';
+        base.u2=document.getElementById(`u2_${g}`)?.value||'';
         base.can1=document.getElementById(`can1_${g}`)?.value||'';
         base.canAltro1=document.getElementById(`canAltro1_${g}`)?.value||'';
         base.can2=document.getElementById(`can2_${g}`)?.value||'';
@@ -449,7 +467,7 @@ function buildOre(){
   w.dataset.built='1';w.dataset.mese=mese;w.dataset.anno=anno;
 
   const cantiereHeader=multi
-    ? `<th style="min-width:130px">Cantieri + ore</th>`
+    ? `<th style="min-width:200px">Cantieri (Entrata–Uscita)</th>`
     : `<th style="min-width:95px">Cantiere</th>`;
 
   let h=`<div class="card">
@@ -494,15 +512,21 @@ function buildOre(){
         <input class="altro" type="text" id="canAltro2_${g}" placeholder="Scrivi..." style="display:${can2Val==='ALTRO'?'block':'none'}" value="${canAltro2Val}" oninput="scheduleAutosave()">`;
     }
 
+    const timeCells1=multi
+      ?`<td colspan="2" style="padding:2px">${canCell1}</td>`
+      :`<td><input type="time" id="e1_${g}" value="${bg?.e1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+       <td><input type="time" id="u1_${g}" value="${bg?.u1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+       <td>${canCell1}</td>`;
+    const timeCells2=multi
+      ?`<td colspan="2" style="padding:2px">${canCell2}</td>`
+      :`<td><input type="time" id="e2_${g}" value="${bg?.e2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+       <td><input type="time" id="u2_${g}" value="${bg?.u2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
+       <td>${canCell2}</td>`;
     h+=`<tr id="rg${g}" class="${tgClass}">
       <td class="dg"><b>${g}</b><br>${dn}</td>
-      <td><input type="time" id="e1_${g}" value="${bg?.e1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-      <td><input type="time" id="u1_${g}" value="${bg?.u1||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-      <td>${canCell1}</td>
+      ${timeCells1}
       <td class="sep"></td>
-      <td><input type="time" id="e2_${g}" value="${bg?.e2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-      <td><input type="time" id="u2_${g}" value="${bg?.u2||''}" oninput="cGg(${g});scheduleAutosave()"></td>
-      <td>${canCell2}</td>
+      ${timeCells2}
       <td class="ht" id="ht${g}">—</td>
       <td><select class="tg" id="tg${g}" onchange="stGg(${g});scheduleAutosave()">
         <option value="L"${tgVal==='L'?' selected':''}>Lavoro</option>
@@ -520,11 +544,20 @@ function buildOre(){
 
 function cGg(g){
   const tm=v=>{if(!v)return 0;const[h,m]=v.split(':').map(Number);return h*60+m;};
+  const nome=document.getElementById('nomeSelect').value;
+  const multi=isMulti(nome);
   let tot=0;
-  const e1=document.getElementById(`e1_${g}`)?.value;const u1=document.getElementById(`u1_${g}`)?.value;
-  const e2=document.getElementById(`e2_${g}`)?.value;const u2=document.getElementById(`u2_${g}`)?.value;
-  if(e1&&u1){let d=tm(u1)-tm(e1);if(d<0)d+=1440;if(d>0)tot+=d;}
-  if(e2&&u2){let d=tm(u2)-tm(e2);if(d<0)d+=1440;if(d>0)tot+=d;}
+  if(multi){
+    // in modalità multi il totale è la somma delle ore di tutti i cantieri
+    [1,2].forEach(turno=>{
+      getMcData(g,turno).forEach(mc=>{tot+=mc.ore*60;});
+    });
+  } else {
+    const e1=document.getElementById(`e1_${g}`)?.value;const u1=document.getElementById(`u1_${g}`)?.value;
+    const e2=document.getElementById(`e2_${g}`)?.value;const u2=document.getElementById(`u2_${g}`)?.value;
+    if(e1&&u1){let d=tm(u1)-tm(e1);if(d<0)d+=1440;if(d>0)tot+=d;}
+    if(e2&&u2){let d=tm(u2)-tm(e2);if(d<0)d+=1440;if(d>0)tot+=d;}
+  }
   document.getElementById(`ht${g}`).textContent=tot>0?(Math.floor(tot/60)+'h'+(tot%60?String(tot%60).padStart(2,'0'):'')):'—';
 }
 
@@ -580,8 +613,12 @@ function bRiep(){
     const e1=document.getElementById(`e1_${g}`)?.value;const u1=document.getElementById(`u1_${g}`)?.value;
     const e2=document.getElementById(`e2_${g}`)?.value;const u2=document.getElementById(`u2_${g}`)?.value;
     let tot=0;
-    if(e1&&u1){let d=tm(u1)-tm(e1);if(d<0)d+=1440;if(d>0)tot+=d;}
-    if(e2&&u2){let d=tm(u2)-tm(e2);if(d<0)d+=1440;if(d>0)tot+=d;}
+    if(multi){
+      [1,2].forEach(turno=>{getMcData(g,turno).forEach(mc=>{tot+=mc.ore*60;});});
+    } else {
+      if(e1&&u1){let d=tm(u1)-tm(e1);if(d<0)d+=1440;if(d>0)tot+=d;}
+      if(e2&&u2){let d=tm(u2)-tm(e2);if(d<0)d+=1440;if(d>0)tot+=d;}
+    }
     const ore=tot/60;
     if(t==='F'){gF++;oreFerie+=ore>0?ore:8;}
     else if(t==='M'){gM++;oreMal+=ore>0?ore:8;}
@@ -591,13 +628,13 @@ function bRiep(){
       if(multi){
         [1,2].forEach(turno=>{
           getMcData(g,turno).forEach(mc=>{
-            if(mc.can&&mc.ore){cantieriMap[mc.can]=(cantieriMap[mc.can]||0)+parseFloat(mc.ore);}
+            if(mc.can&&mc.ore>0){cantieriMap[mc.can]=(cantieriMap[mc.can]||0)+mc.ore;}
           });
         });
       } else {
         const c1=getCanNomeSingle(1,g);const c2=getCanNomeSingle(2,g);
-if(c1&&e1&&u1){let d1=tm(u1)-tm(e1);if(d1<0)d1+=1440;cantieriMap[c1]=(cantieriMap[c1]||0)+d1/60;}
-if(c2&&e2&&u2){let d2=tm(u2)-tm(e2);if(d2<0)d2+=1440;cantieriMap[c2]=(cantieriMap[c2]||0)+d2/60;}
+        if(c1&&e1&&u1){let d1=tm(u1)-tm(e1);if(d1<0)d1+=1440;cantieriMap[c1]=(cantieriMap[c1]||0)+d1/60;}
+        if(c2&&e2&&u2){let d2=tm(u2)-tm(e2);if(d2<0)d2+=1440;cantieriMap[c2]=(cantieriMap[c2]||0)+d2/60;}
       }
     }
   }
